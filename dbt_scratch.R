@@ -15,7 +15,9 @@ set.seed(1234)
 
 dbt[dbt=='?'] <- NA
 
-dbt.readm <- subset(dbt, readmitted=='<30' | readmitted=='NO')
+dbt.readm <- dbt
+
+#dbt.readm <- subset(dbt, readmitted=='<30' | readmitted=='NO')
 summary(dbt.readm)
 
 table(dbt$age)
@@ -48,14 +50,14 @@ table(dbt.readm$admission_source_id)
 
 dbt.readm$discharge_disposition_id <- as.character(dbt.readm$discharge_disposition_id)
 dbt.readm$discharge_disposition_id[dbt.readm$discharge_disposition_id==1] <- 'Home'
-dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('2','5','28')='Inpatient' ")
-dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('3','4','16','17','22','23','24')='Outpatient' ")
-dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('6','8')='Home Health' ")
-dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('7')='AMA' ")
-#dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c()='Expired' ")
-dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('12','15')='Same Institute' ")
-dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('13','14')='Hospice' ")
-dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('11','19','20','21','9','10','18','25','26','27','29','30')='NA?' ")
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id,
+                                             " c('2','3','4','5','6','8',
+                                             '9','10','12','15','16','17',
+                                             '22',23','24','25','30','27',
+                                             '28','29'")
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id,
+                                             " c('7','11','13','14','18','19',
+                                             '20','21','26'")
 dbt.readm$discharge_disposition_id <- as.factor(dbt.readm$discharge_disposition_id)
 plot(dbt.readm$discharge_disposition_id)
 table(dbt.readm$discharge_disposition_id)
