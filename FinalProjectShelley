@@ -1,0 +1,210 @@
+diabeticdata <- read.csv("~/Desktop/diabetic_data.csv")
+
+library(caret)
+library(lattice)
+library(randomForest)
+library(dplyr)
+library(e1071)
+library(ggplot2)
+library(pROC)
+library(ROCR)
+library(ranger)
+
+###CLEAN THE DATA###
+#remove unnecessary columns
+newdiabeticdata <- subset(diabeticdata, select = -c(encounter_id, patient_nbr, admission_type_id, discharge_disposition_id, admission_source_id, payer_code, medical_specialty, examide, citoglipton, metformin.rosiglitazone, diag_2, diag_3))
+newdiabeticdata
+
+#remove rows with missing weight values 
+mydiabeticdata <- subset(newdiabeticdata, weight!="?")
+mydiabeticdata
+
+#Change readmitted classes >30 <30 to YES
+levels(mydiabeticdata$readmitted) <- c("Yes", "Yes", "No")
+
+#Classify ICD codes as dx catagories
+mydiabeticdata$diag_1 <- as.character(mydiabeticdata$diag_1)
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "39")] <- "Circulatory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "40")] <- "Circulatory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "41")] <- "Circulatory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "42")] <- "Circulatory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "43")] <- "Circulatory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "44")] <- "Circulatory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "45")] <- "Circulatory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "785")] <- "Circulatory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "46")] <- "Respiratory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "47")] <- "Respiratory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "48")] <- "Respiratory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "49")] <- "Respiratory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "50")] <- "Respiratory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "51")] <- "Respiratory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "786")] <- "Respiratory"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "52")] <- "Digestive"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "53")] <- "Digestive"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "54")] <- "Digestive"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "55")] <- "Digestive"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "56")] <- "Digestive"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "57")] <- "Digestive"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "787")] <- "Digestive"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "250")] <- "Diabetes"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "58")] <- "Genitourinary"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "59")] <- "Genitourinary"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "60")] <- "Genitourinary"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "61")] <- "Genitourinary"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "62")] <- "Genitourinary"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "788")] <- "Genitourinary"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "80")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "81")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "82")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "83")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "84")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "85")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "86")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "87")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "88")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "89")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "90")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "91")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "92")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "93")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "94")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "95")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "96")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "97")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "98")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "99")] <- "Injury"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "71")] <- "Musculoskeletal"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "72")] <- "Musculoskeletal"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "73")] <- "Musculoskeletal"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "14")] <- "Neoplasm"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "15")] <- "Neoplasm"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "16")] <- "Neoplasm"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "17")] <- "Neoplasm"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "18")] <- "Neoplasm"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "19")] <- "Neoplasm"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "20")] <- "Neoplasm"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "21")] <- "Neoplasm"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "22")] <- "Neoplasm"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "23")] <- "Neoplasm"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "24")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "25")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "26")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "27")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "28")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "29")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "30")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "31")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "32")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "33")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "34")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "35")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "36")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "37")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "38")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "64")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "65")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "66")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "67")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "68")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "70")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "74")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "75")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "78")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "79")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "8")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "5")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "V5")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "V7")] <- "Other"
+mydiabeticdata$diag_1[startsWith(mydiabeticdata$diag_1, "V4")] <- "Other"
+mydiabeticdata$diag_1 <- as.factor(mydiabeticdata$diag_1)
+
+###VISUALIZATION###
+#Plot data - Histogram
+hist(mydiabeticdata$time_in_hospital)
+hist(mydiabeticdata$num_lab_procedures)
+hist(mydiabeticdata$num_procedures)
+hist(mydiabeticdata$num_medications)
+hist(mydiabeticdata$number_outpatient)
+hist(mydiabeticdata$number_emergency)
+hist(mydiabeticdata$number_inpatient)
+hist(mydiabeticdata$number_diagnoses)
+
+#boxplot
+boxplot(mydiabeticdata$num_medications)
+
+#bargraphs - readmit based on weight
+readmitcounts <- table(mydiabeticdata$readmitted, mydiabeticdata$weight)
+barplot(readmitcounts, main="# of Hospital Readmits Based on Weight", xlab="Weight", col=c("blue","red"), legend = rownames(readmitcounts), beside=TRUE)
+
+#bargraphs - readmit based on race
+readmitcounts <- table(mydiabeticdata$readmitted, mydiabeticdata$race)
+barplot(readmitcounts, main="# of Hospital Readmits Based on Race", xlab="Race", col=c("blue","red"), legend = rownames(readmitcounts), beside=TRUE)
+
+#bargraphs - readmit based on age
+readmitcounts <- table(mydiabeticdata$readmitted, mydiabeticdata$age)
+barplot(readmitcounts, main="# of Hospital Readmits Based on Age", xlab="Age", col=c("blue","red"), legend = rownames(readmitcounts), beside=TRUE)
+
+#plotting
+medreadmit <- data.frame(x=mydiabeticdata$readmitted, y=mydiabeticdata$num_medications)
+plot(medreadmit)
+
+#split training and testing data
+set.seed(2)
+ind <- sample(2, nrow(mydiabeticdata), replace=TRUE, prob = c(0.7,0.3))
+diabetictrain <- mydiabeticdata[ind==1,]
+diabetictest <- mydiabeticdata[ind==2,]
+
+###CLUSTERING - KMeans
+
+#create new train dataframe with numeric variables - all dimensions
+mynumericdf <- subset(diabetictrain, select = c(time_in_hospital, time_in_hospital, num_lab_procedures, num_procedures, num_medications, number_outpatient, number_emergency, number_inpatient, number_diagnoses))
+mynumericdf
+
+results <- kmeans(mynumericdf, 2)
+results
+
+#plot the groups
+plot(mynumericdf, col=results$cluster)
+points(mynumericdf$centers,col=1:2,pch=8,cex=1)
+
+###CLUSTERING - Hierichal
+Sample = sample(nrow(mynumericdf), 120)
+dfdist <- dist(as.matrix(mynumericdf[Sample,]))
+dfhclust <- hclust(dfdist, method="ward.D")
+plot(dfhclust)
+rect.hclust(hclust(dfdist, method="ward.D"),h=200)
+
+###RANDOM FOREST
+rf <- randomForest(readmitted~., data=diabetictrain)
+print(rf)
+
+#prediction & confusion matrix - train data
+p1 <- predict(rf, diabetictrain)
+p1
+confusionMatrix(p1, diabetictrain$readmitted)
+
+#prediction & confusion matrix - test data
+p2 <- predict(rf, diabetictest)
+p2
+confusionMatrix(p2, diabetictest$readmitted)
+
+#optimized value of mtry
+bestmtry <- tuneRF(diabetictrain, diabetictrain$readmitted, 
+                   stepFactor = 1.2, improve = 0.01, trace = TRUE, plot = TRUE)
+
+#Evaluation & Check Accuracy
+plot(rf)
+rf$importance
+varImpPlot(rf)
+varUsed(rf)
+confusionMatrix(p2, diabetictest$readmitted)
+
+###LINEAR REGRESSION
+m <- lm(time_in_hospital ~ num_medications, data=mydiabeticdata)
+summary(m)
+abline(m)
+ggplot(mydiabeticdata, aes(x = num_medications, y = time_in_hospital)) + geom_point() + stat_smooth(method = "lm", col = "red")
+
+###LOGISTIC REGRESSION
+glm.fit <- glm(readmitted ~ num_medications, data = mydiabeticdata, family = binomial)
+summary(glm.fit)
