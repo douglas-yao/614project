@@ -53,7 +53,6 @@ table(dbt.readm$admission_source_id)
 dbt.readm$discharge_disposition_id <- as.character(dbt.readm$discharge_disposition_id)
 dbt.readm$discharge_disposition_id[dbt.readm$discharge_disposition_id==1] <- 'Home'
 dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id,
-                                             
                                              " c('2','3','4','5','6','8',
                                              '9','10','12','15','16','17',
                                              '22','23','24','25','30','27',
