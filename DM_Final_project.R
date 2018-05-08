@@ -1,17 +1,19 @@
 mydata <- read.csv("Desktop/HS614/diabetic_data.csv", na.strings = c("?", NA))
 set.seed(825)
 
-library(caret)
-library(ranger)
-library(ROCR)
-library(pROC)
-library(stringr)
-library(rebus)
-library(klaR)
-library(ggplot2)
-library(Rmisc)
-library(plyr)
-library(RColorBrewer)
+require(caret)
+require(ranger)
+require(ROCR)
+require(pROC)
+require(stringr)
+require(rebus)
+require(klaR)
+require(ggplot2)
+require(Rmisc)
+require(plyr)
+require(RColorBrewer)
+require(factoextra)
+require(car)
 
 ### Drop level ###
 remove <- which(mydata$gender == "Unknown/Invalid") 
@@ -43,11 +45,6 @@ mydata$new_readmit[mydata$new_readmit == "<30"] <- "Yes"
 mydata$new_readmit[mydata$new_readmit == ">30"] <- "Yes"
 mydata$new_readmit <- as.factor(mydata$new_readmit)
 summary(mydata$new_readmit)
-
-### Change to factor level ###
-mydata$admission_type_id <- as.factor(mydata$admission_type_id)
-mydata$discharge_disposition_id <- as.factor(mydata$discharge_disposition_id)
-mydata$admission_source_id <- as.factor(mydata$admission_source_id)
 
 ### Re-grouping diagnosis 1 ###
 mydata$diag_1 <- as.character(mydata$diag_1)
@@ -149,10 +146,47 @@ mydata$medical_specialty[is.na(mydata$medical_specialty)] <- "Missing/Unknown"
 mydata$medical_specialty <- as.factor(mydata$medical_specialty)
 summary(mydata$medical_specialty)
 
+##Re-grouping admission type
+mydata$admission_type_id <- as.character(mydata$admission_type_id)
+mydata$admission_type_id[mydata$admission_type_id==1] <- 'ER'
+mydata$admission_type_id[mydata$admission_type_id==2] <- 'ER'
+mydata$admission_type_id[mydata$admission_type_id==3] <- 'Elective'
+mydata$admission_type_id[mydata$admission_type_id==4] <- 'Newborn'
+mydata$admission_type_id[mydata$admission_type_id==5] <- 'Unknown'
+mydata$admission_type_id[mydata$admission_type_id==6] <- 'Unknown'
+mydata$admission_type_id[mydata$admission_type_id==7] <- 'Trauma Center'
+mydata$admission_type_id[mydata$admission_type_id==8] <- 'Unknown'
+mydata$admission_type_id <- as.factor(mydata$admission_type_id)
+
+##Re-grouping admission type
+mydata$admission_source_id <- as.character(mydata$admission_source_id)
+mydata$admission_source_id <- recode(mydata$admission_source_id, "c(1,2,3) = 'Refer'")
+mydata$admission_source_id <- recode(mydata$admission_source_id, "c(4,5,6,10,18,19,22,25,26) = 'Transfer'")
+mydata$admission_source_id[mydata$admission_source_id== "7"] <- "ER"
+mydata$admission_source_id[mydata$admission_source_id== "8"] <- "Court"
+mydata$admission_source_id <- recode(mydata$admission_source_id, "c(9,15,17,20,21) = 'Unknown'")
+mydata$admission_source_id <- recode(mydata$admission_source_id, "c(11,12,13,14,23,24) = 'Pediatric'")
+mydata$admission_source_id <- as.factor(mydata$admission_source_id)
+
+##Re-grouping discharge id
+mydata$discharge_disposition_id <- as.character(mydata$discharge_disposition_id)
+mydata$discharge_disposition_id[mydata$discharge_disposition_id==1] <- 'Home'
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('2','5','28')='Inpatient' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('3','4','16','17','22','23','24')='Outpatient' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('6','8')='Home Health' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('7')='AMA' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('11','19','20','21')='Expired' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('12','15')='Same Institute' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('13','14')='Hospice' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('27','29','30')='' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('9','10','18','25','26')= 'Unknown'")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('2','5','28')='Inpatient' ")
+mydata$discharge_disposition_id <- as.factor(mydata$discharge_disposition_id)
+
 ### Clean data ###
 delete = c("encounter_id", "patient_nbr", "weight", "payer_code", "diag_2",
-          "diag_3","readmitted", "admission_type_id", "discharge_disposition_id", "age",
-           "admission_source_id", "examide", "citoglipton", "metformin.rosiglitazone") #Last three have single level
+           "diag_3","readmitted", "age", "examide", "citoglipton", "metformin.rosiglitazone") 
+#Last three have single level
 mydata <- mydata[, !(names(mydata) %in% delete)] 
 names(mydata)
 
@@ -208,21 +242,27 @@ testTransformed <- na.omit(testTransformed)
 
 ### Clustering ###
 dat <- subset(trainTransformed, select = -new_readmit)
-number_col <- names(dat) %in% c("time_in_hospital", "num_lab_procedures", "num_medications", "num_procedures", "number_diagnoses", "number_emergency", "number_inpatient", "number_outpatient") 
-#K-means Clustering
+number_col <- names(dat) %in% c("time_in_hospital", "num_lab_procedures", "num_medications", "num_procedures", "number_diagnoses", "number_emergency", "number_inpatient", "number_outpatient")
 cat_dat <- dat[!number_col]
 num_dat <- dat[number_col]
 
+##K-means Clustering
 fit.km_num <- kmeans(num_dat, 2, nstart=20)
 table(fit.km_num$cluster, trainTransformed$new_readmit)
-plot(num_dat, col = fit.km_num$cluster)
-points(fit.km_num$centers,col=1:2,pch=8,cex=1)
+fviz_cluster(fit.km_num, data = num_dat,
+             palette = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07"),
+             ggtheme = theme_minimal(),
+             main = "Partitioning Clustering Plot")
 
 #Hierarchical Clustering
 Sample = sample(nrow(num_dat), 100) 
 d <- dist(as.matrix(num_dat[Sample,]))
 hc <- hclust(d, method="ward.D2")
 plot(hc)
+
+res <- hcut(d, k = 2, stand = TRUE)
+fviz_dend(res, rect = TRUE, cex = 0.5,
+          k_colors = c("#00AFBB","#2E9FDF"))
 
 ### Plot a histogram ###
 not_include <- names(trainTransformed) %in% c("time_in_hospital", "num_lab_procedures",
@@ -267,3 +307,6 @@ confusionMatrix(rf_pred,testTransformed$new_readmit)
 
 rf_pred2 <- predict(rf_fit, testTransformed, type='prob')
 plot(roc(testTransformed$new_readmit, rf_pred2[,2]), print.auc = TRUE, col = "blue", asp = NA, legacy.axes = TRUE)
+
+F1 <- result$byClass[7]
+print(F1)
