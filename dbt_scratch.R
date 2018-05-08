@@ -8,6 +8,8 @@ library(caret)
 library(naivebayes)
 library(e1071)
 library(randomForest)
+library(car)
+library(stringr)
 
 set.seed(1234)
 
@@ -16,9 +18,42 @@ dbt[dbt=='?'] <- NA
 dbt.readm <- subset(dbt, readmitted=='<30' | readmitted=='NO')
 summary(dbt.readm)
 
+dbt.readm$admission_type_id[dbt.readm$admission_type_id==1] <- 'Emergency'
+dbt.readm$admission_type_id[dbt.readm$admission_type_id==2] <- 'Urgent'
+dbt.readm$admission_type_id[dbt.readm$admission_type_id==3] <- 'Elective'
+dbt.readm$admission_type_id[dbt.readm$admission_type_id==4] <- 'Newborn'
+dbt.readm$admission_type_id[dbt.readm$admission_type_id==5] <- NA
+dbt.readm$admission_type_id[dbt.readm$admission_type_id==6] <- NA
+dbt.readm$admission_type_id[dbt.readm$admission_type_id==7] <- 'Trauma Center'
+dbt.readm$admission_type_id[dbt.readm$admission_type_id==8] <- NA
 
+dbt.readm$discharge_disposition_id <- as.character(dbt.readm$discharge_disposition_id)
 
+dbt.readm$discharge_disposition_id[dbt.readm$discharge_disposition_id==1] <- 'Home'
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('2','5','28')='Inpatient' ")
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('3','4','16','17','22','23','24')='Outpatient' ")
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('6','8')='Home Health' ")
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('7')='AMA' ")
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('11','19','20','21')='Expired' ")
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('12','15')='Same Institute' ")
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('13','14')='Hospice' ")
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('27','29','30')='' ")
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('9','10','18','25','26')=NA ")
 
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('2','5','28')='Inpatient' ")
+
+table(dbt.readm$discharge_disposition_id)
+
+for (item in dbt.readm$discharge_disposition_id){
+  if (item == c(2,5,28)){
+    item <- 'Inpatient Facility'
+  } else {
+  NULL
+  }
+}
+                                    
+table(dbt.readm$discharge_disposition_id)
+                                    
 # Delete unrelated / cols with significant NAs
 dbt.readm[c('encounter_id', 'patient_nbr', 'weight', 'payer_code', 'examide', 'citoglipton')] <- list(NULL)
 
