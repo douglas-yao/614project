@@ -18,6 +18,11 @@ dbt[dbt=='?'] <- NA
 dbt.readm <- subset(dbt, readmitted=='<30' | readmitted=='NO')
 summary(dbt.readm)
 
+table(dbt$age)
+
+# Delete unrelated / cols with significant NAs
+dbt.readm[c('encounter_id', 'patient_nbr', 'weight', 'payer_code', 'examide', 'citoglipton', 'acetohexamide')] <- list(NULL)
+
 dbt.readm$admission_type_id[dbt.readm$admission_type_id==1] <- 'Emergency'
 dbt.readm$admission_type_id[dbt.readm$admission_type_id==2] <- 'Urgent'
 dbt.readm$admission_type_id[dbt.readm$admission_type_id==3] <- 'Elective'
@@ -26,36 +31,112 @@ dbt.readm$admission_type_id[dbt.readm$admission_type_id==5] <- NA
 dbt.readm$admission_type_id[dbt.readm$admission_type_id==6] <- NA
 dbt.readm$admission_type_id[dbt.readm$admission_type_id==7] <- 'Trauma Center'
 dbt.readm$admission_type_id[dbt.readm$admission_type_id==8] <- NA
+dbt.readm$admission_type_id <- as.factor(dbt.readm$admission_type_id)
+plot(dbt.readm$admission_type_id)
+table(dbt.readm$admission_type_id)
+
+dbt.readm$admission_source_id <- as.character(dbt.readm$admission_source_id)
+dbt.readm$admission_source_id <- recode(dbt.readm$admission_source_id, "c(1,2,3) = 'Refer'")
+dbt.readm$admission_source_id <- recode(dbt.readm$admission_source_id, "c(4,5,6,10,18,19,22,25,26) = 'Transfer'")
+dbt.readm$admission_source_id[dbt.readm$admission_source_id== '7'] <- 'ER'
+dbt.readm$admission_source_id[dbt.readm$admission_source_id== '8'] <- 'Court'
+dbt.readm$admission_source_id <- recode(dbt.readm$admission_source_id, "c(9,15,17,20,21) = 'Unknown'")
+dbt.readm$admission_source_id <- recode(dbt.readm$admission_source_id, "c(11,12,13,14,23,24) = 'Pediatric'")
+dbt.readm$admission_source_id <- as.factor(dbt.readm$admission_source_id)
+plot(dbt.readm$admission_source_id)
+table(dbt.readm$admission_source_id)
 
 dbt.readm$discharge_disposition_id <- as.character(dbt.readm$discharge_disposition_id)
-
 dbt.readm$discharge_disposition_id[dbt.readm$discharge_disposition_id==1] <- 'Home'
 dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('2','5','28')='Inpatient' ")
 dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('3','4','16','17','22','23','24')='Outpatient' ")
 dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('6','8')='Home Health' ")
 dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('7')='AMA' ")
-dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('11','19','20','21')='Expired' ")
+#dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c()='Expired' ")
 dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('12','15')='Same Institute' ")
 dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('13','14')='Hospice' ")
-dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('27','29','30')='' ")
-dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('9','10','18','25','26')=NA ")
-
-dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('2','5','28')='Inpatient' ")
-
+dbt.readm$discharge_disposition_id <- recode(dbt.readm$discharge_disposition_id, "c('11','19','20','21','9','10','18','25','26','27','29','30')='NA?' ")
+dbt.readm$discharge_disposition_id <- as.factor(dbt.readm$discharge_disposition_id)
+plot(dbt.readm$discharge_disposition_id)
 table(dbt.readm$discharge_disposition_id)
 
-for (item in dbt.readm$discharge_disposition_id){
-  if (item == c(2,5,28)){
-    item <- 'Inpatient Facility'
-  } else {
-  NULL
-  }
-}
+### Re-grouping medical specialty ###
+mydata$medical_specialty <- as.character(mydata$medical_specialty)
+mydata$medical_specialty[mydata$medical_specialty == "AllergyandImmunology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Cardiology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Dermatology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Endocrinology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Endocrinology-Metabolism"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Gastroenterology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Hematology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Hematology/Oncology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "InfectiousDiseases"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "InternalMedicine"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Nephrology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Neurology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Oncology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Pulmonology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Rheumatology"] <- "Medicine"
+
+mydata$medical_specialty[mydata$medical_specialty == "Orthopedics"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Orthopedics-Reconstructive"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgeon"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Cardiovascular"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Cardiovascular/Thoracic"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Colon&Rectal"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-General"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Maxillofacial"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Neuro"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Pediatric"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Plastic"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-PlasticwithinHeadandNeck"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Thoracic"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Vascular"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "SurgicalSpecialty"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Urology"] <- "Surgery"
+
+mydata$medical_specialty[mydata$medical_specialty == "Anesthesiology-Pediatric"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Cardiology-Pediatric"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-AllergyandImmunology"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-CriticalCare"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-EmergencyMedicine"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-Endocrinology"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-Hematology-Oncology "] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-InfectiousDiseases"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-Neurology"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-Pulmonology"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-Hematology-Oncology"] <- "Pediatrics"
+
+mydata$medical_specialty[mydata$medical_specialty == "Gynecology"] <- "OB-GYN"
+mydata$medical_specialty[mydata$medical_specialty == "Obsterics&Gynecology-GynecologicOnco"] <- "OB-GYN"
+mydata$medical_specialty[mydata$medical_specialty == "Obstetrics"] <- "OB-GYN"              
+mydata$medical_specialty[mydata$medical_specialty == "ObstetricsandGynecology"] <- "OB-GYN"  
+
+mydata$medical_specialty[mydata$medical_specialty == "Anesthesiology"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Dentistry"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "DCPTEAM"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Hospitalist"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Neurophysiology"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Ophthalmology"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Osteopath"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Otolaryngology"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "OutreachServices"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Pathology"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Perinatology"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "PhysicalMedicineandRehabilitation"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "PhysicianNotFound"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Podiatry"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Proctology"] <- "Other"                       
+mydata$medical_specialty[mydata$medical_specialty == "Psychiatry"] <- "Other"                              
+mydata$medical_specialty[mydata$medical_specialty == "Psychiatry-Addictive"] <- "Other" 
+mydata$medical_specialty[mydata$medical_specialty == "Psychiatry-Child/Adolescent"] <- "Other" 
+mydata$medical_specialty[mydata$medical_specialty == "Psychology"] <- "Other"  
+mydata$medical_specialty[mydata$medical_specialty == "Radiologist"] <- "Other"  
+mydata$medical_specialty[mydata$medical_specialty == "Radiology"] <- "Other"  
+mydata$medical_specialty[mydata$medical_specialty == "Resident"] <- "Other"  
+mydata$medical_specialty[mydata$medical_specialty == "Speech"] <- "Other"  
+mydata$medical_specialty[mydata$medical_specialty == "SportsMedicine"] <- "Other"  
                                     
-table(dbt.readm$discharge_disposition_id)
-                                    
-# Delete unrelated / cols with significant NAs
-dbt.readm[c('encounter_id', 'patient_nbr', 'weight', 'payer_code', 'examide', 'citoglipton')] <- list(NULL)
 
 #dbt$readmitted <- as.character(dbt$readmitted)
 
@@ -78,6 +159,7 @@ plot(hc.complete, main="Complete Linkage", xlab="", sub="", cex=.9)
 
 cutree(hc.complete, 2)
 
+#Split Data 80/20
 trainIndex <- createDataPartition(dbt$readmitted, times=1, p=.8, list=FALSE)
 
 dbt_train <- dbt[trainIndex,]
