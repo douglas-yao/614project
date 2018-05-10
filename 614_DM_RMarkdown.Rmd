@@ -1,0 +1,456 @@
+---
+title: "HS614 DM Readmitted Dataset"
+author: "Ploypun Narindrarangkura"
+output: html_document
+---
+Clinical Desicion Support 
+and Health Data Analytics
+May 10, 2018
+
+  The dataset represents 10 years (1999-2008) of clinical care at 130 US hospitals and integrated delivery networks. It includes over 50 features representing patient and hospital outcomes. Information was extracted from the database for encounters that satisfied the following criteria.
+(1)	It is an inpatient encounter (a hospital admission).
+(2)	It is a diabetic encounter, that is, one during which any kind of diabetes was entered to the system as a diagnosis.
+(3)	The length of stay was at least 1 day and at most 14 days.
+(4)	Laboratory tests were performed during the encounter.
+(5)	Medications were administered during the encounter.
+    The data contains such attributes as patient number, race, gender, age, admission type, time in hospital, medical specialty of admitting physician, number of lab test performed, HbA1c test result, diagnosis, number of medication, diabetic medications, number of outpatient, inpatient, and emergency visits in the year before the hospitalization, etc.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+##Packages
+```{r}
+require(caret)
+require(ranger)
+require(ROCR)
+require(pROC)
+require(stringr)
+require(rebus)
+require(klaR)
+require(ggplot2)
+require(Rmisc)
+require(plyr)
+require(RColorBrewer)
+require(factoextra)
+require(car)
+```
+##Set seed
+```{r}
+set.seed(825)
+```
+##Import data
+```{r}
+setwd("~/desktop")
+mydata <- read.csv("~/Desktop/HS614/diabetic_data.csv", na.strings = c("?", NA))
+summary(mydata)
+```
+#Data Exploration
+##Drop level
+```{r}
+remove <- which(mydata$gender == "Unknown/Invalid") 
+mydata <- mydata[-remove,] 
+mydata$gender <- factor(mydata$gender)
+summary(mydata$gender)
+```
+There was 3 cases of Unknown/Invalid.
+##Data visualization
+```{r}
+plot(mydata$age)
+```
+I used histogram because it was categorical data. When I looked at distribution of age, most of patients had old age so I plan to group age into 2 levels: less than 50 and more than 50 years old.
+```{r}
+plot(mydata$medical_specialty)
+```
+I used histogram because it was categorical data. There was 72 levels of medical specialty, which was hard to find a relationship with the outcome so I plan to group by department.
+##Age group 50
+```{r}
+mydata$new_age50 <- mydata$age
+mydata$new_age50 <- as.character(mydata$age)
+mydata$new_age50[mydata$new_age50=="[0-10)"] <- "<50"
+mydata$new_age50[mydata$new_age50=="[10-20)"] <- "<50"
+mydata$new_age50[mydata$new_age50=="[20-30)"] <- "<50"
+mydata$new_age50[mydata$new_age50=="[30-40)"] <- "<50"
+mydata$new_age50[mydata$new_age50=="[40-50)"] <- "<50"
+mydata$new_age50[mydata$new_age50=="[50-60)"] <- ">50"
+mydata$new_age50[mydata$new_age50=="[60-70)"] <- ">50"
+mydata$new_age50[mydata$new_age50=="[70-80)"] <- ">50"
+mydata$new_age50[mydata$new_age50=="[80-90)"] <- ">50"
+mydata$new_age50[mydata$new_age50=="[90-100)"] <- ">50"
+mydata$new_age50 <- as.factor(mydata$new_age50)
+summary(mydata$new_age50)
+```
+##Re-grouping diagnosis 1 (primary diagnosis)
+```{r}
+mydata$diag_1 <- as.character(mydata$diag_1)
+mydata$diag_1[str_detect(mydata$diag_1, pattern = START %R% or("39","40","41","42","43","44","45","785")) == T] <- "Circulatory"
+mydata$diag_1[str_detect(mydata$diag_1, pattern = START %R% or("52","53","54","55","56","57","787")) == T] <- "Digestive"
+mydata$diag_1[str_detect(mydata$diag_1, pattern = START %R% or("58","59","60","61","62","788")) == T] <- "Genitourinary"
+mydata$diag_1[str_detect(mydata$diag_1, pattern = START %R% "25") == T] <- "Diabetes"
+mydata$diag_1[str_detect(mydata$diag_1, pattern = START %R% or("80","81","82","83","84","85","86","87","88","89","90","91","92","93","94","95","96","97","98","99")) == T] <- "Injury"
+mydata$diag_1[str_detect(mydata$diag_1, pattern = START %R% or("71","72","73")) == T] <- "Musculoskeletal"
+mydata$diag_1[str_detect(mydata$diag_1, pattern = START %R% or("14","15","16","17","18","19","20","21","22","23")) == T] <- "Neoplasms"
+mydata$diag_1[str_detect(mydata$diag_1, pattern = START %R% or("46","47","48","49","50","51","786")) == T] <- "Respiratory"
+mydata$diag_1[str_detect(mydata$diag_1, pattern = "[[:digit:]]") == T] <- "Other"
+mydata$diag_1 <- as.factor(mydata$diag_1)
+summary(mydata$diag_1)
+```
+##Re-grouping medical specialty
+```{r}
+mydata$medical_specialty <- as.character(mydata$medical_specialty)
+mydata$medical_specialty[mydata$medical_specialty == "AllergyandImmunology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Cardiology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Dermatology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Endocrinology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Endocrinology-Metabolism"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Gastroenterology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Hematology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Hematology/Oncology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "InfectiousDiseases"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "InternalMedicine"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Nephrology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Neurology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Oncology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Pulmonology"] <- "Medicine"
+mydata$medical_specialty[mydata$medical_specialty == "Rheumatology"] <- "Medicine"
+
+mydata$medical_specialty[mydata$medical_specialty == "Orthopedics"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Orthopedics-Reconstructive"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgeon"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Cardiovascular"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Cardiovascular/Thoracic"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Colon&Rectal"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-General"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Maxillofacial"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Neuro"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Pediatric"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Plastic"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-PlasticwithinHeadandNeck"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Thoracic"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Surgery-Vascular"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "SurgicalSpecialty"] <- "Surgery"
+mydata$medical_specialty[mydata$medical_specialty == "Urology"] <- "Surgery"
+
+mydata$medical_specialty[mydata$medical_specialty == "Anesthesiology-Pediatric"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Cardiology-Pediatric"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-AllergyandImmunology"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-CriticalCare"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-EmergencyMedicine"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-Endocrinology"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-Hematology-Oncology "] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-InfectiousDiseases"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-Neurology"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-Pulmonology"] <- "Pediatrics"
+mydata$medical_specialty[mydata$medical_specialty == "Pediatrics-Hematology-Oncology"] <- "Pediatrics"
+
+mydata$medical_specialty[mydata$medical_specialty == "Gynecology"] <- "OB-GYN"
+mydata$medical_specialty[mydata$medical_specialty == "Obsterics&Gynecology-GynecologicOnco"] <- "OB-GYN"
+mydata$medical_specialty[mydata$medical_specialty == "Obstetrics"] <- "OB-GYN"              
+mydata$medical_specialty[mydata$medical_specialty == "ObstetricsandGynecology"] <- "OB-GYN"  
+               
+mydata$medical_specialty[mydata$medical_specialty == "Anesthesiology"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Dentistry"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "DCPTEAM"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Hospitalist"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Neurophysiology"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Ophthalmology"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Osteopath"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Otolaryngology"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "OutreachServices"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Pathology"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Perinatology"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "PhysicalMedicineandRehabilitation"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "PhysicianNotFound"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Podiatry"] <- "Other"
+mydata$medical_specialty[mydata$medical_specialty == "Proctology"] <- "Other"                       
+mydata$medical_specialty[mydata$medical_specialty == "Psychiatry"] <- "Other"                              
+mydata$medical_specialty[mydata$medical_specialty == "Psychiatry-Addictive"] <- "Other" 
+mydata$medical_specialty[mydata$medical_specialty == "Psychiatry-Child/Adolescent"] <- "Other" 
+mydata$medical_specialty[mydata$medical_specialty == "Psychology"] <- "Other"  
+mydata$medical_specialty[mydata$medical_specialty == "Radiologist"] <- "Other"  
+mydata$medical_specialty[mydata$medical_specialty == "Radiology"] <- "Other"  
+mydata$medical_specialty[mydata$medical_specialty == "Resident"] <- "Other"  
+mydata$medical_specialty[mydata$medical_specialty == "Speech"] <- "Other"  
+mydata$medical_specialty[mydata$medical_specialty == "SportsMedicine"] <- "Other"  
+
+mydata$medical_specialty[is.na(mydata$medical_specialty)] <- "Missing/Unknown"  
+
+mydata$medical_specialty <- as.factor(mydata$medical_specialty)
+summary(mydata$medical_specialty)
+```
+##Re-grouping admission type
+```{r}
+mydata$admission_type_id <- as.character(mydata$admission_type_id)
+mydata$admission_type_id[mydata$admission_type_id==1] <- 'ER'
+mydata$admission_type_id[mydata$admission_type_id==2] <- 'ER'
+mydata$admission_type_id[mydata$admission_type_id==3] <- 'Elective'
+mydata$admission_type_id[mydata$admission_type_id==4] <- 'Newborn'
+mydata$admission_type_id[mydata$admission_type_id==5] <- 'Unknown'
+mydata$admission_type_id[mydata$admission_type_id==6] <- 'Unknown'
+mydata$admission_type_id[mydata$admission_type_id==7] <- 'Trauma Center'
+mydata$admission_type_id[mydata$admission_type_id==8] <- 'Unknown'
+mydata$admission_type_id <- as.factor(mydata$admission_type_id)
+plot(mydata$admission_type_id)
+```
+##Re-grouping admission type
+```{r}
+mydata$admission_source_id <- as.character(mydata$admission_source_id)
+mydata$admission_source_id <- recode(mydata$admission_source_id, "c(1,2,3) = 'Refer'")
+mydata$admission_source_id <- recode(mydata$admission_source_id, "c(4,5,6,10,18,19,22,25,26) = 'Transfer'")
+mydata$admission_source_id[mydata$admission_source_id== "7"] <- "ER"
+mydata$admission_source_id[mydata$admission_source_id== "8"] <- "Court"
+mydata$admission_source_id <- recode(mydata$admission_source_id, "c(9,15,17,20,21) = 'Unknown'")
+mydata$admission_source_id <- recode(mydata$admission_source_id, "c(11,12,13,14,23,24) = 'Pediatric'")
+mydata$admission_source_id <- as.factor(mydata$admission_source_id)
+plot(mydata$admission_source_id)
+```
+##Re-grouping discharge id
+```{r}
+mydata$discharge_disposition_id <- as.character(mydata$discharge_disposition_id)
+mydata$discharge_disposition_id[mydata$discharge_disposition_id==1] <- 'Home'
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('2','5','28')='Inpatient' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('3','4','16','17','22','23','24')='Outpatient' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('6','8')='Home Health' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('7')='AMA' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('11','19','20','21')='Expired' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('12','15')='Same Institute' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('13','14')='Hospice' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('27','29','30')='' ")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('9','10','18','25','26')= 'Unknown'")
+mydata$discharge_disposition_id <- recode(mydata$discharge_disposition_id, "c('2','5','28')='Inpatient' ")
+mydata$discharge_disposition_id <- as.factor(mydata$discharge_disposition_id)
+plot(mydata$discharge_disposition_id)
+```
+##Change readmitted class
+```{r}
+mydata$new_readmit <- mydata$readmitted
+mydata$new_readmit <- as.character(mydata$new_readmit)
+mydata$new_readmit[mydata$new_readmit == "NO"] <- "No"
+mydata$new_readmit[mydata$new_readmit == "<30"] <- "Yes"
+mydata$new_readmit[mydata$new_readmit == ">30"] <- "Yes"
+mydata$new_readmit <- as.factor(mydata$new_readmit)
+summary(mydata$new_readmit)
+```
+```{r}
+plot(mydata$new_readmit)
+```
+I used histogram because it was categorical data. There was balance of proportion between readmitted and non-readmitted. 
+##Box plot
+```{r}
+g <- ggplot(data=mydata)
+g + geom_boxplot(data=mydata, aes(y=time_in_hospital, x=new_readmit, 
+                                  fill=new_readmit), alpha =.5) +
+  xlab("Readmitted") +
+  ylab("Time in hospital (days)") +
+  ggtitle("Box plot")
+```
+I used box plot because I plotted between numeric and categorical data. The median of time in hospital in readmitted was higher than non-readmitted.
+```{r}
+g + geom_boxplot(data=mydata, aes(y=number_diagnoses, x=new_readmit, 
+                                  fill=new_readmit), alpha =.5) +
+  xlab("Readmitted") +
+  ylab("Number of diagnoses") +
+  ggtitle("Box plot")
+```
+I used box plot because I plotted between numeric and categorical data. The median of number of diagnoses in readmitted was higher than non-readmitted.
+##Bar plot of medical specialty
+```{r}
+par(mfrow=c(1, 1), mar=c(5, 5, 4, 4))
+coul = brewer.pal(8, "Pastel2")
+counts <- 100*prop.table(table(mydata$new_readmit, mydata$medical_specialty),2)
+barplot(counts, col=coul, main = "Medical specialty vs readmitted",
+        xlab = "Medical specialty", ylab = "Percentage of readmitted", space = 1, legend.text=TRUE, args.legend=list(x = "topright", bty = "n", inset = c(-0.15,0)))
+```
+I used bar plot and color by readmitted because they were both categorical data and I want to compare proportion between each department. There was one department, which was OB-GYN, that had obviously difference between readmitted and non-readmitted.
+#Data Engineering, Feature Extraction and Selection
+##Romove some features
+```{r}
+delete = c("encounter_id", "patient_nbr", "weight", "payer_code", "diag_2",
+          "diag_3","readmitted", "age", "examide", "citoglipton", "metformin.rosiglitazone") 
+mydata <- mydata[, !(names(mydata) %in% delete)] 
+names(mydata)
+```
+1. Remove encounter_id, patient_nbr, and payer_code because there are no clinical related to outcome.
+2. Remove weight because there is a lot of NA (>50%)
+3. Remove diag_2 and diag_3 because primary diagnosis seems to related with the outcome than comorbidities. 
+4. Remove readmitted and age because I re-grouped into new columns.
+5. Remove examide, citoglipton and metformin.rosiglitazone because there are only 1 level.
+Other features had clinical related to readmission of diabetes patients.
+##Set level
+```{r}
+levels(mydata$max_glu_serum) <- c("None", "Norm", ">200", ">300")
+summary(mydata$max_glu_serum)
+levels(mydata$A1Cresult) <- c("None", "Norm", ">7", ">8")
+summary(mydata$A1Cresult)
+levels(mydata$change) <- c("No", "Ch")
+summary(mydata$change)
+```
+##Split the data
+```{r}
+index <- createDataPartition(y = mydata$new_readmit, p=0.7, list = FALSE)
+train.data <- mydata[index,] # 70% of data
+write.csv(train.data, file = "~/Desktop/HS614/TrainDataDM.csv")
+
+test.data<- mydata[-index,] # 30% of data
+write.csv(test.data, file = "~/Desktop/HS614/TestDataDM.csv")
+```
+##Normalization
+```{r}
+preProcValues <- preProcess(train.data, method = c("center","scale"))
+trainTransformed <- predict(preProcValues, train.data)
+testTransformed <- predict(preProcValues, test.data)
+```
+##Remove NA
+```{r}
+trainTransformed  <- na.omit(trainTransformed)
+testTransformed <- na.omit(testTransformed)
+```
+#Clustering
+```{r}
+dat <- subset(trainTransformed, select = -new_readmit)
+number_col <- names(dat) %in% c("time_in_hospital", "num_lab_procedures", "num_medications", "num_procedures", "number_diagnoses", "number_emergency", "number_inpatient", "number_outpatient")
+cat_dat <- dat[!number_col]
+num_dat <- dat[number_col]
+```
+Remove outcome and select only numeric data from train dataset.
+##K-means Clustering
+```{r}
+fit.km_num <- kmeans(num_dat, 2, nstart=20)
+fviz_cluster(fit.km_num, data = num_dat, palette = c("#00AFBB","#2E9FDF"), 
+             ggtheme = theme_minimal(),main = "Partitioning Clustering Plot")
+
+fit.km_num.2 <- kmeans(num_dat, 3, nstart=20)
+fviz_cluster(fit.km_num.2, data = num_dat, palette = c("#00AFBB","#2E9FDF", "#E7B800"),
+             ggtheme = theme_minimal(), main = "Partitioning Clustering Plot")
+```
+Using K = 2 because outcome of this dataset was yes and no and setted nstart = 20, which means that R will try 20 different random starting assignments and then select the one with the lowest within cluster variation. I already did normalization for numeric features before doing K-means clustering. First picture has shown that there were 2 groups: blue and green but it could not clearly separate from each other. Second picture, I tried K = 3 and the outcome did not better.
+##Hierarchical Clustering 
+```{r}
+Sample = sample(nrow(num_dat), 1000) 
+d <- dist(as.matrix(num_dat[Sample,]))
+res <- hclust(d, method = "ward.D2")
+plot(res)
+```
+The result of Hierarchical Clustering has shown that there were 2 branches then it separated into 2 branches again.
+#Classification
+##Plot a histogram of each feauture
+```{r}
+not_include <- names(trainTransformed) %in% c("time_in_hospital", "num_lab_procedures",
+                                              "num_medications", "num_procedures", "number_diagnoses",
+                                              "number_emergency", "number_inpatient", "number_outpatient") 
+histo <- trainTransformed[!not_include]
+readmit <- histo[which(histo$new_readmit=='Yes'),]
+no_readmit <- histo[which(histo$new_readmit=='No'),]
+
+for (i in 1:(ncol(readmit)-1))
+  local({
+    i <- i
+    g1 <- ggplot(data=readmit)
+    g2 <- ggplot(data=no_readmit)
+    p1 <- g1 + geom_bar(aes(readmit[,i], fill=readmit[,i])) +
+      xlab(colnames(readmit[i])) +
+      ylab("Number of patients") +
+      ggtitle("Readmitted") +
+      scale_fill_discrete(name=colnames(readmit[i]))
+    p2 <- g2 + geom_bar(aes(no_readmit[,i], fill=no_readmit[,i])) +
+      xlab(colnames(no_readmit[i])) +
+      ylab("Number of patients") +
+      ggtitle("Non-readmitted") +
+      scale_fill_discrete(name=colnames(no_readmit[i]))
+    multiplot(p1, p2, cols=2)
+  })
+```
+```{r}
+for (i in 1:(ncol(num_dat)))
+  local({
+    i <- i
+    g.num <- ggplot(data=num_dat, aes(num_dat[,i]))
+    p.num <- g.num + geom_bar() +
+      xlab(colnames(num_dat[i])) +
+      ylab("Number of patients") +
+      ggtitle("Histogram")
+    plot(p.num)
+  })
+```
+```{r}
+panel.cor <- function(x, y, digits = 2, cex.cor, ...)
+{
+  usr <- par("usr"); on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  # correlation coefficient
+  r <- cor(x, y)
+  txt <- format(c(r, 0.123456789), digits = digits)[1]
+  txt <- paste("r= ", txt, sep = "")
+  text(0.5, 0.6, txt)
+
+  # p-value calculation
+  p <- cor.test(x, y)$p.value
+  txt2 <- format(c(p, 0.123456789), digits = digits)[1]
+  txt2 <- paste("p= ", txt2, sep = "")
+  if(p<0.01) txt2 <- paste("p= ", "<0.01", sep = "")
+  text(0.5, 0.4, txt2)
+}
+
+pairs(num_dat, upper.panel = panel.cor)
+```
+##Scatter plot
+```{r}
+g.scatter <- ggplot(data=trainTransformed)
+g.scatter + geom_point(data=trainTransformed, aes(y=number_outpatient, x=num_medications, color=new_readmit)) +
+  xlab("Time in hospital (days)") +
+  ylab("Number of lab procedures") +
+  ggtitle("Scatter plot")
+```  
+##Random Forest
+```{r}
+fitControl <- trainControl(method = "repeatedcv", number = 5, repeats=3, 
+                           savePredictions="final", classProbs=TRUE, search="grid")
+tunegrid <- expand.grid(.mtry=c(1:15),
+                        .splitrule = "gini", 
+                        .min.node.size = c(10, 20))
+rf_fit <- train(new_readmit ~ ., data = trainTransformed,
+                method = "ranger", metric= "Accuracy", tuneGrid=tunegrid,
+                trControl = fitControl)
+rf_fit
+
+rf_pred <- predict(rf_fit, testTransformed, type='raw') 
+result <- confusionMatrix(rf_pred,testTransformed$new_readmit, positive = levels(testTransformed$new_readmit)[2])  
+print(result)
+
+rf_pred2 <- predict(rf_fit, testTransformed, type='prob')
+plot(roc(testTransformed$new_readmit, rf_pred2[,2]), print.auc = TRUE, col = "blue", asp = NA, legacy.axes = TRUE)
+
+F1 <- result$byClass[7]
+print(F1)
+```
+Ranger package is a Fast Implementation of Random Forests. I used the caret R package to tune algorithm parameters, which was grid search. The grid search is a linear serach through a vector of candidates values.
+***
+Random Forest is a tree-based algorithm which involves building several decision trees, then combining their output to improve generalization ability of the model. I used Random Forest because this dataset had both numerical and categorical features, which Random Forest can be used to solve both regression and classification problems. Furthermore, there were 101,763 observations so SVM doesn't perform well because the required training time is higher.
+***
+###Ramdom Forests
+* Pros
+    + Very high accuracy
+    + Simple to understand and interpret
+    + Scalable across many nodes  
+    + Built-in protection from over fitting
+    + More tolerant of less processed data
+    + Can handle very large data sets with many features  
+    + Robust with respect to goodness of features
+    + Practical for real world use
+    + Does not assume a distribution
+    + Memory efficient
+* Cons
+    + Time-consuming
+    + Increases bias relative to single decision tree
+    + Different results possible in retraining on same data
+***
+The final values used for the model were mtry = 7, splitrule = gini and min.node.size = 20. The accuracy of this model was 0.6415333.
+***
+1. sensitivity = 0.5285
+    + 52.85% of patients who actually readmitted to a hospital of those who were predicted to readmitted to a hospital.
+2. specificity = 0.7370
+    + 73.70% of patients who actually not readmitted to a hospital of those who were predicted to not readmitted to a hospital.
+3. accuracy = 0.6402
+    + This classifier was 64.02% accurate, which was similar to accuracy of the model so there were not under/overfitting.
+4. F1 = 0.5768912
+    + The harmonic average of the precision and recall was 0.58.
+5. AUC = 0.695
+    + The quantify the performance of a classifier was 69.5%.
