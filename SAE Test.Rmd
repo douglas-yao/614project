@@ -1,0 +1,217 @@
+---
+title: "Test Code"
+author: "Shelley Escalera"
+date: "May 15, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Test Document
+
+```{r}
+bcdata <- read.csv("~/Desktop/breastcancerdata.csv", header=FALSE, na.strings = c("?", "NA"))
+
+#libraries
+require(caret)
+require(lattice)
+require(randomForest)
+require(dplyr)
+require(e1071)
+require(ggplot2)
+require(pROC)
+require(ROCR)
+require(ROSE)
+require(ranger)
+require(stringr)
+require(rebus)
+require(klaR)
+require(Rmisc)
+require(plyr)
+require(RColorBrewer)
+require(car)
+require(factoextra)
+require(cluster)
+require(NbClust)
+
+###CLEAN THE DATA
+#Change column names
+colnames(bcdata) <- c("Class", "Age", "Menopause", "Tumor_Size", "Inv_Nodes", "Node_Caps", "Deg_Malig", "Breast", "Breast_Quad", "Irradiation")
+
+#Convert variables to appropriate type
+bcdata$Deg_Malig <- as.factor(bcdata$Deg_Malig)
+str(bcdata)
+
+#Make Values Legal
+names(bcdata) <- make.names(names(bcdata))
+
+#Rename Values (Convert to character, then convert back to factor)
+bcdata$Class <- as.character(bcdata$Class)
+bcdata$Class[bcdata$Class== 'no-recurrence-events'] <- 'No Reccurence'
+bcdata$Class[bcdata$Class== 'recurrence-events'] <- 'Reccurence'
+bcdata$Class <- as.factor(bcdata$Class)
+
+#How many NAs? Omit!
+sum(is.na(bcdata))
+bcdata <- na.omit(bcdata)
+
+#Split Training and Testing data
+set.seed(2)
+ind <- sample(2, nrow(bcdata), replace=TRUE, prob = c(0.7,0.3))
+bctrain <- bcdata[ind==1,]
+bctest <- bcdata[ind==2,]
+
+###VISUALIZATION###
+# GG Plot, using geom bar to create a bar chart since Class is a catogorical data
+p1 <- ggplot(bcdata, aes(x = Age, fill = Class)) +
+  geom_bar() +
+  theme_bw() +
+  labs(x = "Age", y = "Patient Count", title = "Reccurence by Age")
+
+p2 <- ggplot(bcdata, aes(x = Menopause, fill = Class)) +
+  geom_bar() +
+  theme_bw() +
+  labs(x = "Menopause", y = "Patient Count", title = "Reccurence by Menopause")
+
+p3 <- ggplot(bcdata, aes(x = Tumor_Size, fill = Class)) +
+  geom_bar() +
+  theme_bw() +
+  labs(x = "Tumor_Size", y = "Patient Count", title = "Reccurence by Tumor Size")
+
+p4 <- ggplot(bcdata, aes(x = Inv_Nodes, fill = Class)) +
+  geom_bar() +
+  theme_bw() +
+  labs(x = "Inv_Nodes", y = "Patient Count", title = "Reccurence by Inv Nodes")
+
+p5 <- ggplot(bcdata, aes(x = Node_Caps, fill = Class)) +
+  geom_bar() +
+  theme_bw() +
+  labs(x = "Node_Caps", y = "Patient Count", title = "Reccurence by Node Caps")
+
+p6 <- ggplot(bcdata, aes(x = Deg_Malig, fill = Class)) +
+  geom_bar() +
+  theme_bw() +
+  labs(x = "Deg_Malig", y = "Patient Count", title = "Reccurence by Deg Malig")
+
+p7 <- ggplot(bcdata, aes(x = Breast, fill = Class)) +
+  geom_bar() +
+  theme_bw() +
+  labs(x = "Breast", y = "Patient Count", title = "Reccurence by Breast Location")
+
+multiplot(p1, p2, p3, p4, p5, p6, p7, cols=3)
+
+#Histograms (Per Feature)
+reccurence1 <- table(bcdata$Class, bcdata$Tumor_Size)
+barplot(reccurence1, main="Reccurence Vs No Reccurence based on Tumor Size", xlab="Tumor Size", col=c("blue","red"), legend = rownames(reccurence1), beside=TRUE)
+
+###CLUSTERING### - K-Means
+set.seed(123)
+#Convert all variables to numeric values
+bcdata$Class <- as.numeric(bcdata$Class)
+bcdata$Age <- as.numeric(bcdata$Age)
+bcdata$Menopause <- as.numeric(bcdata$Menopause)
+bcdata$Tumor_Size <- as.numeric(bcdata$Tumor_Size)
+bcdata$Inv_Nodes <- as.numeric(bcdata$Inv_Nodes)
+bcdata$Node_Caps <- as.numeric(bcdata$Node_Caps)
+bcdata$Deg_Malig <- as.numeric(bcdata$Deg_Malig)
+bcdata$Breast <- as.numeric(bcdata$Breast)
+bcdata$Breast_Quad <- as.numeric(bcdata$Breast_Quad)
+bcdata$Irradiation <- as.numeric(bcdata$Irradiation)
+str(bcdata)
+
+#Scaling [Only for numeric variables!]
+preProcValues <- preProcess(bctrain, method = c("center","scale"))
+trainTransformed <- predict(preProcValues, bctrain)
+testTransformed <- predict(preProcValues, bctest)
+
+#Average Silhouette Width for K-Means
+set.seed(123)
+k.max <- 15
+sil <- rep(0, k.max)
+for(i in 2:k.max){
+  km.res <- kmeans(bcdata, centers = i, nstart = 25)
+  ss <- silhouette(km.res$cluster, dist(bcdata))
+  sil[i] <- mean(ss[, 3])
+}
+
+# Plot Average Silhouette Width
+plot(1:k.max, sil, type = "b", pch = 1, 
+     frame = TRUE, xlab = "Number of clusters k")
+abline(v = which.max(sil), lty = 3)
+
+#Peform K-Means Clustering
+results <- kmeans(bcdata, centers = 2, nstart = 25)
+print(results)
+
+plot(bcdata, col=results$cluster)
+  points(bcdata$centers)
+  fviz_cluster(results, data = bcdata)
+
+### HIERICHAL CLUSTERING
+#Average Silhouette for Hierichal Clustering 
+fviz_nbclust(bcdata, hcut, method = "silhouette",
+               hc_method = "complete")  
+
+#Perform Hierichal Clustering
+Sample = sample(nrow(bcdata), 150)
+dfdist <- dist(as.matrix(bcdata[Sample,]))
+dfhclust <- hclust(dfdist, method="ward.D")
+plot(dfhclust)
+rect.hclust(hclust(dfdist, method="ward.D"),h=50)
+
+###CLASSIFICATION - Random Forest
+
+bcdata <- read.csv("~/Desktop/breastcancerdata.csv", header=FALSE, na.strings = c("?", "NA"))
+
+###CLEAN THE DATA (Same as above)
+colnames(bcdata) <- c("Class", "Age", "Menopause", "Tumor_Size", "Inv_Nodes", "Node_Caps", "Deg_Malig", "Breast", "Breast_Quad", "Irradiation")
+bcdata$Deg_Malig <- as.factor(bcdata$Deg_Malig)
+str(bcdata)
+names(bcdata) <- make.names(names(bcdata))
+bcdata$Class <- as.character(bcdata$Class)
+bcdata$Class[bcdata$Class== 'no-recurrence-events'] <- 'No Reccurence'
+bcdata$Class[bcdata$Class== 'recurrence-events'] <- 'Reccurence'
+bcdata$Class <- as.factor(bcdata$Class)
+bcdata <- na.omit(bcdata)
+
+#Split Training and Testing data
+set.seed(2)
+ind <- sample(2, nrow(bcdata), replace=TRUE, prob = c(0.7,0.3))
+bctrain <- bcdata[ind==1,]
+bctest <- bcdata[ind==2,]
+
+#Scaling [Only for numeric variables!]
+preProcValues <- preProcess(bctrain, method = c("center","scale"))
+trainTransformed <- predict(preProcValues, bctrain)
+testTransformed <- predict(preProcValues, bctest)
+
+# Train the data in Random Forest
+bestmtry <- tuneRF(trainTransformed, trainTransformed$Class,
+                   stepFactor = 1.2, improve = 0.01, trace = T, plot = T)
+bcrf <- randomForest(Class ~ ., 
+                           data=trainTransformed,
+                           na.action = na.omit)
+print(bcrf)
+
+#Plot variables
+plot(bcrf)
+varImpPlot(bcrf)
+bcrf$importance
+
+#Predictions
+pred1 <- predict(bcrf, newdata = testTransformed, type = "class")
+pred1
+
+#Check Accuracy via Confusion Matrix
+confusionMatrix(table(pred1, testTransformed$Class))
+
+#Plotting ROC curve and calculate AUC
+probpred<- predict(bcrf, newdata = testTransformed, type = 'prob')
+probpred
+auc <- auc(testTransformed$Class,probpred[,2])
+auc
+plot(roc(testTransformed$Class,probpred[,2]))
+```
+change
